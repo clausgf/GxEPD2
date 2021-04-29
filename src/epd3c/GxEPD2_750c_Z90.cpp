@@ -139,6 +139,58 @@ void GxEPD2_750c_Z90::writeImage(const uint8_t* black, const uint8_t* color, int
   delay(1); // yield() to avoid WDT on ESP8266 and ESP32
 }
 
+void GxEPD2_750c_Z90::writeImage(const uint8_t channel, const uint8_t* data, int16_t x, int16_t y, int16_t w, int16_t h, bool invert, bool mirror_y, bool pgm)
+{
+  delay(1); // yield() to avoid WDT on ESP8266 and ESP32
+  uint16_t wb = (w + 7) / 8; // width bytes, bitmaps are padded
+  x -= x % 8; // byte boundary
+  w = wb * 8; // byte boundary
+  int16_t x1 = x < 0 ? 0 : x; // limit
+  int16_t y1 = y < 0 ? 0 : y; // limit
+  int16_t w1 = x + w < int16_t(WIDTH) ? w : int16_t(WIDTH) - x; // limit
+  int16_t h1 = y + h < int16_t(HEIGHT) ? h : int16_t(HEIGHT) - y; // limit
+  int16_t dx = x1 - x;
+  int16_t dy = y1 - y;
+  w1 -= dx;
+  h1 -= dy;
+  if ((w1 <= 0) || (h1 <= 0)) return;
+  _Init_Part();
+  _setPartialRamArea(x1, y1, w1, h1);
+  switch (channel)
+  {
+    case 0: _writeCommand(0x24); break;
+    case 1: _writeCommand(0x26); break;
+    default: break;
+  }
+  _startTransfer();
+  for (int16_t i = 0; i < h1; i++)
+  {
+    for (int16_t j = 0; j < w1 / 8; j++)
+    {
+      uint8_t d = 0;
+      // use wb, h of bitmap for index!
+      uint16_t idx = mirror_y ? j + dx / 8 + uint16_t((h - 1 - (i + dy))) * wb : j + dx / 8 + uint16_t(i + dy) * wb;
+      if (pgm)
+      {
+#if defined(__AVR) || defined(ESP8266) || defined(ESP32)
+        d = pgm_read_byte(&data[idx]);
+#else
+        d = data[idx];
+#endif
+      }
+      else
+      {
+        d = data[idx];
+      }
+      if (invert) d = ~d;
+      _transfer(d);
+    }
+  }
+  _endTransfer();
+  
+  delay(1); // yield() to avoid WDT on ESP8266 and ESP32
+}
+
 void GxEPD2_750c_Z90::writeImagePart(const uint8_t bitmap[], int16_t x_part, int16_t y_part, int16_t w_bitmap, int16_t h_bitmap,
                                      int16_t x, int16_t y, int16_t w, int16_t h, bool invert, bool mirror_y, bool pgm)
 {
